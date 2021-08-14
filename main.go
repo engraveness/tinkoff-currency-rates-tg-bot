@@ -4,12 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
 const euroTicker = "EURRUB"
 const usdTicker = "USDRUB"
+
+type User struct {
+	MessageId int `json:"messageId"`
+	Threshold float64 `json:"threshold"`
+	LastSentUsd float64 `json:"lastSentUsd"`
+	LastSentEur float64 `json:"lastSentEur"`
+}
 
 func main() {
 	var configPath = "config.json"
@@ -35,13 +45,13 @@ func main() {
 	nextChatCheck := time.Now().Unix()
 	nextRateCheck := nextChatCheck
 
-	var prevUsd float32 = 0
-	var prevEur float32 = 0
+	var prevUsd float64 = 0
+	var prevEur float64 = 0
 
 	var rateForSend = ""
 	var newRateForSend = ""
 
-	var messagesMap = map[int]int{}
+	var messagesMap = map[int]*User{}
 
 	var mapPath = config.UsersFilePath
 	if mapPath == "" {
@@ -65,10 +75,13 @@ func main() {
 		if nextRateCheck - unix <= 0 {
 			result := getExchangeRate(token)
 
-			newRateForSend = fmt.Sprintf("%s\n%s", getCurrencyString(euroTicker, result[euroTicker], prevEur), getCurrencyString(usdTicker, result[usdTicker], prevUsd))
+			var newEur = math.Floor(result[euroTicker] * 100) / 100
+			var newUsd = math.Floor(result[usdTicker] * 100) / 100
 
-			prevEur = result[euroTicker]
-			prevUsd = result[usdTicker]
+			newRateForSend = fmt.Sprintf("%s\n%s", getCurrencyString(euroTicker, newEur, prevEur), getCurrencyString(usdTicker, newUsd, prevUsd))
+
+			prevEur = newEur
+			prevUsd = newUsd
 
 			nextRateCheck = unix + int64(config.RefreshRate.Currency)
 		}
@@ -79,33 +92,87 @@ func main() {
 			messages := getTelegramMessages(config.TelegramToken, offset)
 
 			for _, message := range messages {
-				switch message.Text {
-				case "/stop":
-					delete(messagesMap, message.ChatId)
-				default:
-					// since we are editing the last sent message, we want our message to be the last one in the conversation
-					// so, we send a new message as response to any other user message
-					messagesMap[message.ChatId] = 0
-				}
+				if strings.HasPrefix(message.Text, "/threshold") {
+					if message.Text == "/threshold" {
+						messagesMap[message.ChatId].MessageId = 0
 
-				needSaveMap = true
+						sendTelegramMessage(config.TelegramToken, message.ChatId, fmt.Sprintf("Current threshold is %.2f. To change it send /threshold *VALUE*, i.e. /threshold 0.25", messagesMap[message.ChatId].Threshold))
+					} else {
+						var stripped = message.Text[len("/threshold "):]
+						val, err := strconv.ParseFloat(stripped, 64)
+
+						messagesMap[message.ChatId].MessageId = 0
+
+						if err != nil {
+							sendTelegramMessage(config.TelegramToken, message.ChatId, "Error processing argument. Please enter valid floating point value, i.e. /threshold 0.25")
+						} else {
+							messagesMap[message.ChatId].Threshold = val
+							needSaveMap = true
+
+							sendTelegramMessage(config.TelegramToken, message.ChatId, fmt.Sprintf("New threshold is %.2f", val))
+						}
+					}
+				} else {
+					switch message.Text {
+					case "/stop":
+						delete(messagesMap, message.ChatId)
+
+						needSaveMap = true
+					case "/start":
+						var greetings = fmt.Sprintf("Welcome! from now on, you will receive a message with the current exchange rate for the euro and the dollar. If you want, you can set the minimum threshold by which the course should change, so that you know about it by typing the command /threshold *VALUE*")
+						messagesMap[message.ChatId] = new(User)
+
+						sendTelegramMessage(config.TelegramToken, message.ChatId, greetings)
+
+						needSaveMap = true
+					default:
+						// since we are editing the last sent message, we want our message to be the last one in the conversation
+						// so, we send a new message as response to any other user message
+						messagesMap[message.ChatId].MessageId = 0
+					}
+				}
 
 				offset = message.UpdateId + 1
 			}
 		}
 
-		if newRateForSend != rateForSend {
-			var rateWithDate = fmt.Sprintf("%s\nUpdated at %s", newRateForSend, now.Format("2006-01-02 15:04:05"))
+		for k, v := range messagesMap {
+			if v.Threshold != 0 {
+				if math.Abs(v.LastSentUsd-prevUsd) < v.Threshold && math.Abs(v.LastSentEur-prevEur) < v.Threshold {
+					continue
+				}
 
-			for k, v := range messagesMap {
-				if v != 0 {
-					editTelegramMessage(config.TelegramToken, k, v, rateWithDate)
-				} else {
-					things := sendTelegramMessage(config.TelegramToken, k, rateWithDate)
+				var message = fmt.Sprintf("%s\n%s", getCurrencyString(euroTicker, prevEur, v.LastSentEur), getCurrencyString(usdTicker, prevUsd, v.LastSentUsd))
+				sendTelegramMessage(config.TelegramToken, k, message)
 
-					if things.Ok{
-						messagesMap[k] = things.Result.MessageId
-						needSaveMap = true
+				v.LastSentUsd = prevUsd
+				v.LastSentEur = prevEur
+
+				if config.SaveTheSentRates {
+					needSaveMap = true
+				}
+			} else {
+				if newRateForSend != rateForSend || v.LastSentUsd == 0 {
+					var message = fmt.Sprintf("%s\nUpdated at %s", newRateForSend, now.Format("2006-01-02 15:04:05"))
+
+					if v.MessageId != 0 {
+						newMessage := editTelegramMessage(config.TelegramToken, k, v.MessageId, message)
+
+						if newMessage.Ok && config.SaveTheSentRates {
+							needSaveMap = true
+						}
+					} else {
+						newMessage := sendTelegramMessage(config.TelegramToken, k, message)
+
+						if newMessage.Ok {
+							v.MessageId = newMessage.Result.MessageId
+							v.LastSentUsd = prevUsd
+							v.LastSentEur = prevEur
+
+							if config.SaveTheSentRates {
+								needSaveMap = true
+							}
+						}
 					}
 				}
 			}

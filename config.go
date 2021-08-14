@@ -13,6 +13,7 @@ type Config struct {
 	} `json:"refreshRate"`
 	TelegramToken string `json:"telegramToken"`
 	UsersFilePath string `json:"usersFilePath"`
+	SaveTheSentRates bool `json:"saveTheSentRates"`
 }
 
 func loadConfig(path string, target interface{}) error  {
