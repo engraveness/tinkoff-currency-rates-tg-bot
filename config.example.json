@@ -1,0 +1,9 @@
+{
+  "refreshRate": {
+    "currency": 300,
+    "messages": 10,
+    "mainCycle": 5
+  },
+  "telegramToken": "YOUR_TOKEN_HERE",
+  "usersFilePath": "map.json"
+}
