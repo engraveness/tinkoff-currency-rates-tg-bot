@@ -21,7 +21,7 @@ type ExchangeRateResponsePayloadValue struct {
 		FromCache bool    `json:"from_cache"`
 	} `json:"price"`
 	HistoricalPrices []struct {
-		Amount   float32 `json:"amount"`
+		Amount   float64 `json:"amount"`
 		UnixTime float64 `json:"unixtime"`
 	} `json:"historicalPrices"`
 	Symbol struct {
@@ -37,7 +37,7 @@ type ExchangeRateResponse struct {
 	Status string `json:"status"`
 }
 
-func getExchangeRate(token string) map[string]float32 {
+func getExchangeRate(token string) map[string]float64 {
 	request := ExchangeRateRequest{
 		Country: "All",
 		CurrentPage: 0,
@@ -54,7 +54,7 @@ func getExchangeRate(token string) map[string]float32 {
 
 	postJson(exchangeRateUrl + token, &exchangeRateParcel, requestBytes)
 
-	var result = map[string]float32{}
+	var result = map[string]float64{}
 
 	for i := 0; i < len(exchangeRateParcel.Payload.Values); i++ {
 		var val = exchangeRateParcel.Payload.Values[i]

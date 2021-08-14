@@ -10,7 +10,7 @@ var signs = map[string]string{
 	"EURRUB": "€",
 }
 
-func getCurrencyString(ticker string, newValue float32, oldValue float32) string {
+func getCurrencyString(ticker string, newValue float64, oldValue float64) string {
 	sign := signs[ticker]
 
 	var result = fmt.Sprintf("%s <a href=\"https://www.tinkoff.ru/invest/currencies/%s/\">%.2f</a>", sign, ticker, newValue)

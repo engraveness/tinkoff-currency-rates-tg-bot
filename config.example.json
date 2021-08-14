@@ -5,5 +5,6 @@
     "mainCycle": 5
   },
   "telegramToken": "YOUR_TOKEN_HERE",
-  "usersFilePath": "map.json"
+  "usersFilePath": "map.json",
+  "saveTheSentRates": false
 }
