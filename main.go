@@ -15,10 +15,26 @@ const euroTicker = "EURRUB"
 const usdTicker = "USDRUB"
 
 type User struct {
-	MessageId int `json:"messageId"`
-	Threshold float64 `json:"threshold"`
+	MessageId   int     `json:"messageId"`
+	Threshold   float64 `json:"threshold"`
 	LastSentUsd float64 `json:"lastSentUsd"`
 	LastSentEur float64 `json:"lastSentEur"`
+}
+
+func loadJsonFromFile(path string, target interface{}) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	decoder := json.NewDecoder(f)
+	err = decoder.Decode(&target)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func main() {
@@ -30,7 +46,7 @@ func main() {
 
 	var config = Config{}
 
-	err := loadConfig(configPath, &config)
+	err := loadJsonFromFile(configPath, &config)
 	if err != nil {
 		fmt.Printf("Can't load config at path %s: %s. Pass the full path to the config.json as the first argument or create config.json near the executable file", configPath, err)
 		return
@@ -59,7 +75,7 @@ func main() {
 	}
 
 	// we're good if config isn't found, we'll create it ourselves
-	_ = loadConfig(mapPath, &messagesMap)
+	_ = loadJsonFromFile(mapPath, &messagesMap)
 
 	var offset = 0
 
@@ -72,11 +88,11 @@ func main() {
 
 		var now = time.Now()
 		var unix = now.Unix()
-		if nextRateCheck - unix <= 0 {
+		if nextRateCheck-unix <= 0 {
 			result := getExchangeRate(token)
 
-			var newEur = math.Floor(result[euroTicker] * 100) / 100
-			var newUsd = math.Floor(result[usdTicker] * 100) / 100
+			var newEur = math.Floor(result[euroTicker]*100) / 100
+			var newUsd = math.Floor(result[usdTicker]*100) / 100
 
 			newRateForSend = fmt.Sprintf("%s\n%s", getCurrencyString(euroTicker, newEur, prevEur), getCurrencyString(usdTicker, newUsd, prevUsd))
 
@@ -88,7 +104,7 @@ func main() {
 
 		var needSaveMap = false
 
-		if nextChatCheck - unix <= 0 {
+		if nextChatCheck-unix <= 0 {
 			messages := getTelegramMessages(config.TelegramToken, offset)
 
 			for _, message := range messages {
