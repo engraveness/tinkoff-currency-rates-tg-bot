@@ -199,7 +199,7 @@ func main() {
 		if needSaveMap {
 			file, _ := json.MarshalIndent(messagesMap, "", " ")
 
-			err = ioutil.WriteFile("map.json", file, 0644)
+			err = ioutil.WriteFile(config.UsersFilePath, file, 0644)
 			if err != nil {
 				fmt.Printf("error during messagesMap save: %s", err)
 			}
